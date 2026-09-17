@@ -17,13 +17,6 @@ redturtle-cookieplone = "redturtle_cookieplone.cli:main"
 [project.urls]
 Homepage = "https://github.com/RedTurtle/redturtle-cookieplone"
 
-[tool.uv]
-# Senza questo, `uvx --from .` riusa la wheel in cache e ignora le modifiche ai
-# sorgenti: uv invalida la build solo sui metadati, e nemmeno --refresh o
-# --reinstall lo smuovono. Cosi' invece un `uvx --from .` durante lo sviluppo
-# esegue davvero il codice che hai davanti.
-cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }, { file = "src/**/*.tmpl" }]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

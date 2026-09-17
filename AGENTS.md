@@ -157,32 +157,63 @@ in entrambi i casi: e' rumore, non e' la causa.
 
 Non c'e' una suite. Si prova contro cookieplone vero, che e' l'unico test che conta.
 
-```bash
-# il comando come lo vede l'utente, senza installarlo
-uvx --from "git+file://$PWD" plone-addon-rt <sottocomando> ...
+**Durante lo sviluppo, esegui i sorgenti diretti:**
 
-# baseline pulita da riusare per i diff
+```bash
+PYTHONPATH=src python3 -m redturtle_cookieplone <sottocomando> ...
+```
+
+`uvx --from .` **non va bene per questo**: serve una wheel in cache e ignora le
+modifiche ai sorgenti. Nemmeno `--refresh`, `--reinstall` o un `[tool.uv] cache-keys`
+lo smuovono; l'unico modo e' `uv cache clean <nome-pacchetto>` prima di ogni giro. Ci
+si perde mezz'ora a inseguire un bug gia' corretto, quindi: sorgenti diretti mentre
+sviluppi, `uvx --from git+file://$PWD` solo per la prova finale dopo il commit.
+
+**Baseline pulita da riusare per i diff:**
+
+```bash
 uvx cookieplone monorepo_addon -o gen --no-input \
   'author=RedTurtle Technology' email=sviluppo@redturtle.it \
   'title=Demo' description=d project_slug=demo python_package_name=demo.x \
   npm_package_name=volto-demo github_organization=RedTurtle \
   container_registry=github initialize_documentation=0 \
   plone_version=6.2.0 volto_version=19.3.0
+```
 
-cp -r gen/demo probe && plone-addon-rt align probe
-diff -r gen/demo probe -x .git -x .ruff_cache     # il delta dell'overlay
+**I controlli che contano:**
+
+```bash
+cp -r gen/demo probe
+PYTHONPATH=src python3 -m redturtle_cookieplone align probe
+diff -r gen/demo probe -x .git -x .ruff_cache        # il delta dell'overlay
 
 uvx --from actionlint-py actionlint probe/.github/workflows/*.yml
 uv pip install --no-deps --target /tmp/x -e probe/backend   # il setup.py shim regge
-plone-addon-rt align probe                                  # idempotenza
+PYTHONPATH=src python3 -m redturtle_cookieplone align probe # idempotenza
 ```
-
-`uvx --from "git+file://$PWD"` costruisce dall'**ultimo commit**, non dal working tree:
-committa prima di provare.
 
 Il build del frontend (`make -C frontend build`, minuti) serve solo quando si tocca
 qualcosa che riguarda il frontend. Il bundle esce in
 `frontend/core/packages/volto/build/`.
+
+**Provare il comando come lo vede l'utente**, dopo il commit:
+
+```bash
+uvx --from "git+file://$PWD" redturtle-cookieplone <sottocomando> ...
+```
+
+Costruisce dall'**ultimo commit**, non dal working tree.
+
+### I due stati da distinguere sempre
+
+Molti messaggi e molte decisioni dipendono da **se il repo e' stato installato o no**
+(`frontend/pnpm-lock.yaml` esiste?) e da **se il nome npm e' gia' scoped**. Un test su
+un repo appena generato non dice niente su un repo installato, e viceversa: provale
+entrambe.
+
+Esempio concreto di cosa va storto se non lo si fa: il messaggio "rigenera il lockfile"
+di `cmd_scope` usciva anche su un repo appena generato, dove nessun lockfile esiste e
+`create` sta per crearlo giusto al passo dopo.
 
 ## `extends`: la strada non presa
 

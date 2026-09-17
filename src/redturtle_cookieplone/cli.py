@@ -1182,12 +1182,17 @@ def cmd_scope(args: argparse.Namespace) -> int:
 
     code = rep.summary()
     if renamed and not args.dry_run:
-        print(f"""
+        # Solo se un lockfile c'e' davvero. Su un repo appena generato non c'e'
+        # (cookieplone non lo genera) e `make install` lo scrive dopo, gia' col
+        # nome nuovo: dire "rigeneralo" parlerebbe di un file inesistente.
+        if (repo / fe_root / "pnpm-lock.yaml").exists():
+            print(f"""
 Ora e' obbligatorio rigenerare il lockfile, perche' la CI gira con
 --frozen-lockfile e il rename lo ha invalidato:
 
   cd {fe_root} && make install
-
+""")
+        print(f"""
 `publishConfig.access = "public"` e' gia' nel package.json generato, e
 npm.yml/bootstrap-npm.sh passano gia' `--access public`: per un pacchetto scoped
 serve, altrimenti npm lo pubblicherebbe `restricted`.
