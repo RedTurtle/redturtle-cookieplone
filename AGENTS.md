@@ -233,6 +233,60 @@ Esempio concreto di cosa va storto se non lo si fa: il messaggio "rigenera il lo
 di `cmd_scope` usciva anche su un repo appena generato, dove nessun lockfile esiste e
 `create` sta per crearlo giusto al passo dopo.
 
+## Bug upstream che compensiamo
+
+### `settings.ts` non passa il lint del repo che lo contiene
+
+Cookieplone genera un `monorepo_addon` che **non passa il proprio `make lint`**, e la
+CI lo scopre al primo push:
+
+```
+packages/volto-<slug>/src/config/settings.ts
+  1:33  error  Replace `"@plone/registry"` with `'@plone/registry'`  prettier/prettier
+```
+
+Causa: `settings.ts` esiste in tre template, e due hanno apici singoli mentre
+`sub/addon_settings` li ha doppi. L'ordine dei subtemplate di `monorepo_addon` e'
+
+```
+1. add-ons/backend   2. add-ons/frontend   3. docs/starter
+4. sub/addon_settings   5. ide/vscode   6. ci/gh_monorepo_addon
+```
+
+quindi il #4 sovrascrive il file corretto scritto dal #2. Il `.prettierrc` generato
+ha `singleQuote: true`, e il job `code-analysis` di `frontend.yml` fallisce.
+
+Compensato in `format_frontend()`, che dopo `make install` lancia `make -C frontend
+format`. Si usa il formatter del repo e non una sostituzione mirata degli apici,
+cosi' copre qualunque cosa upstream lasci non formattata, adesso e in futuro, con la
+regola del repo e non con la nostra. Verificato su un repo pristine: sistema quel file
+e non tocca nient'altro.
+
+### `ci-test` del frontend non gira
+
+Due difetti nel `frontend/Makefile` generato, che fanno fallire il job
+`Frontend: Unit tests`:
+
+```
+Makefile:114: warning: undefined variable 'pwd'
+> vitest --passWithNoTests --passWithNoTests
+Error: Expected a single value for option "--passWithNoTests", received [true, true]
+```
+
+1. `ci-test` fa `pnpm run test --passWithNoTests`, ma lo script `test` di
+   `package.json` passa gia' quel flag. vitest 3.x rifiuta il doppione. Si toglie dal
+   Makefile e non dallo script, cosi' `pnpm test` da solo resta identico.
+2. `VOLTOCONFIG=$(pwd)/volto.config.js`: in un Makefile `$(pwd)` e' un'espansione di
+   **make**, che non ha nessuna variabile `pwd`, quindi diventa stringa vuota e
+   `VOLTOCONFIG` punta a `/volto.config.js`. Serve `$$(pwd)`, cosi' lo espande la
+   shell.
+
+Compensati in `patch_frontend_makefile()`. Riprodotti su repo pristine.
+
+**Da togliere quando upstream corregge** `templates/sub/addon_settings/.../src/config/settings.ts`.
+Va segnalato a plone/cookieplone-templates: e' un file solo, ed e' l'unico di quel
+subtemplate con `from "` invece di `from '`.
+
 ## `extends`: la strada non presa
 
 Da cookieplone 2.0 un `cookieplone-config.json` downstream puo' dichiarare

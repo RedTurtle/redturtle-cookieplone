@@ -39,7 +39,11 @@ redturtle-cookieplone create -o .
 ```
 
 Fa in sequenza, fermandosi al primo errore: `cookieplone` → `align` → `scope` →
-`make -C frontend install`.
+`make -C frontend install` → `make -C frontend format`.
+
+L'ultimo passo non e' cosmetico: cookieplone genera un `settings.ts` che viola il
+`.prettierrc` dello stesso repo, quindi senza formattare la CI fallisce su
+`make lint` al primo push. Con `--no-install` il passo salta, e va lanciato a mano.
 
 Non interattivo, con `--title` (servono anche `--description`, `--project-slug`,
 `--github-organization`):

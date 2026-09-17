@@ -648,6 +648,46 @@ def pin_workspace_devdeps(
         )
 
 
+def patch_frontend_makefile(repo: Path, meta: dict, rep: Report) -> None:
+    """Corregge il target `ci-test` del frontend, che come generato non gira.
+
+    Due difetti distinti, entrambi nel Makefile del template e visibili solo in
+    CI, nel job `Frontend: Unit tests`:
+
+    1. `pnpm run test --passWithNoTests`, mentre lo script `test` di
+       package.json passa gia' `--passWithNoTests`. vitest 3.x rifiuta il
+       doppione con *Expected a single value for option "--passWithNoTests",
+       received [true, true]* e il job fallisce. Si toglie dal Makefile, non
+       dallo script, cosi' `pnpm test` da solo continua a comportarsi uguale.
+
+    2. `VOLTOCONFIG=$(pwd)/volto.config.js`: dentro un Makefile `$(pwd)` e'
+       un'espansione di **make**, non della shell, e make non ha nessuna
+       variabile `pwd`. Diventa la stringa vuota — da cui il
+       *warning: undefined variable 'pwd'* e un `VOLTOCONFIG=/volto.config.js`
+       che non esiste. Va raddoppiato il `$` perche' lo espanda la shell.
+
+    Riprodotti su un repo pristine, mai toccato dall'overlay: sono bug upstream
+    di plone/cookieplone-templates, da togliere di qui quando li correggono.
+    """
+    package_path = meta.get("frontend", {}).get("package", {}).get("path")
+    if not package_path:
+        return
+    path = repo / package_path.split("/packages/")[0] / "Makefile"
+    if not path.exists():
+        rep.already("frontend/Makefile: assente, salto")
+        return
+
+    text = path.read_text()
+    original = text
+    text = text.replace("pnpm run test --passWithNoTests", "pnpm run test")
+    text = text.replace("VOLTOCONFIG=$(pwd)/", "VOLTOCONFIG=$$(pwd)/")
+
+    if text == original:
+        rep.already("frontend/Makefile: ci-test gia' a posto")
+        return
+    rep.write(path, text)
+
+
 def remove_needs_references(text: str, name: str) -> str:
     """Toglie le righe che leggono ancora `needs.<name>.…` dopo la rimozione.
 
@@ -699,6 +739,7 @@ def cmd_align(args: argparse.Namespace) -> int:
         pin_workspace_devdeps(
             repo, meta, pinned_volto_version(repo, args.volto_version), rep
         )
+        patch_frontend_makefile(repo, meta, rep)
 
     code = rep.summary()
     # Chiamato da `create`, questo blocco lo stampa lui alla fine: qui sarebbe
@@ -1295,6 +1336,37 @@ def _load_answers_file(path: str | None) -> dict:
     return data
 
 
+def format_frontend(repo: Path, fe_root: str) -> None:
+    """Formatta il frontend con gli strumenti del repo stesso.
+
+    Serve perche' cookieplone genera un add-on che **non passa il proprio
+    lint**: il subtemplate `sub/addon_settings` gira dopo `add-ons/frontend` e
+    ne sovrascrive `src/config/settings.ts` con una copia ad apici doppi, mentre
+    il `.prettierrc` generato ha `singleQuote: true`. Risultato: il job
+    `code-analysis` di `frontend.yml` fallisce al primo push, su un repo appena
+    creato e mai toccato a mano.
+
+    Verificato su repo pristine: `make format` sistema quel file e non tocca
+    nient'altro. E' un bug upstream in plone/cookieplone-templates; questo passo
+    si potra' togliere quando e' corretto.
+
+    Si formatta con `make format` e non con una sostituzione mirata degli apici
+    perche' cosi' vale qualunque cosa upstream lasci non formattata, oggi e in
+    futuro, e la regola applicata e' quella del repo, non la nostra.
+
+    Non fatale: a questo punto la generazione e' completa e riuscita, e un
+    formatter che esce diverso da zero non deve far sembrare fallito tutto.
+    """
+    print(f"\n--- make -C {fe_root} format")
+    result = subprocess.run(["make", "-C", fe_root, "format"], cwd=repo, check=False)
+    if result.returncode != 0:
+        warn(
+            f"`make -C {fe_root} format` e' uscito con {result.returncode}. Il repo "
+            "c'e' ed e' a posto, ma controlla `make -C "
+            f"{fe_root} lint` prima del primo push."
+        )
+
+
 def cmd_create(args: argparse.Namespace) -> int:
     out_dir = Path(args.output_dir).resolve()
     # Senza --title si lascia fare il wizard a cookieplone: e' il modo comodo a
@@ -1456,8 +1528,14 @@ def cmd_create(args: argparse.Namespace) -> int:
         # clonato Volto core, cosa che fa il target `install`. Girando dopo il
         # rename, il suo `pnpm i` scrive gia' il lockfile con il nome scoped.
         _run(["make", "-C", fe_root, "install"], cwd=repo)
+        format_frontend(repo, fe_root)
     else:
         print("\n4/4  make install: salto.")
+        warn(
+            f"senza install non posso formattare: lancia `make -C {fe_root} format` "
+            "prima del primo push. Il `settings.ts` che genera cookieplone viola il "
+            "`.prettierrc` del repo, quindi la CI fallirebbe su `make lint`."
+        )
 
     print("\n" + "=" * 70)
     print(f"Pronto: {repo}")
