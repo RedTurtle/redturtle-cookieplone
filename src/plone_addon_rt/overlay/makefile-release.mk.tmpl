@@ -1,0 +1,11 @@
+###########################################
+# Release
+###########################################
+.PHONY: release
+release:  ## Aggiorna versioni e changelog e crea il tag (i pacchetti li pubblica la CI)
+	@bash ./scripts/release.sh
+
+.PHONY: bootstrap-npm
+bootstrap-npm:  ## Una tantum: login, prima publish su npm, trusted publisher per la CI, logout
+	@bash ./scripts/bootstrap-npm.sh
+

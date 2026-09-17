@@ -1,0 +1,111 @@
+#!/bin/bash
+# Bootstrap npm: da eseguire UNA SOLA VOLTA, subito dopo aver creato il repo.
+#
+# npm non permette di configurare un trusted publisher su un pacchetto che non
+# esiste ancora, quindi la primissima pubblicazione deve essere manuale. Da li'
+# in poi pubblica la CI via OIDC e nessuno deve piu' rinnovare token.
+#
+# Lo script pubblica e basta: il trusted publisher si configura dal sito, ed e'
+# lo script stesso a dettare i valori da mettere. La via CLI (`npm trust`)
+# esiste ma non vale la candela: richiede una npm recente (npm 10.9 non ce l'ha,
+# e il giro via `npx npm@latest` e' lento) e soprattutto pretende una sessione
+# con 2FA, quindi fallisce con 403 se si e' autenticati con un granular access
+# token dell'~/.npmrc — che per la publish invece va benissimo.
+#
+# E' idempotente: se il pacchetto esiste gia' non ripubblica.
+#
+# Gestisce da se' login e logout, ma solo della sessione che apre lui: se eri
+# gia' autenticato la lascia intatta, perche' `npm logout` invalida il token
+# lato registry e ti butterebbe fuori anche dove lo stavi usando.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+PACKAGE_PATH="@PACKAGE_PATH@"
+NPM_NAME="@NPM_NAME@"
+GITHUB_SLUG="@GITHUB_SLUG@"
+WORKFLOW="npm.yml"
+# Esplicito e non negoziabile: un `@scope:registry` nell'~/.npmrc di chi lancia
+# lo script dirottererebbe publish e view su un altro registry senza dirlo, e
+# il trusted publisher OIDC esiste solo su npmjs.org.
+NPM_REGISTRY="https://registry.npmjs.org/"
+
+OWNED_SESSION=0
+
+cleanup() {
+    if [ "${OWNED_SESSION}" = "1" ]; then
+        echo ""
+        echo "==> npm logout (chiudo la sessione aperta da questo script)"
+        npm logout --registry "${NPM_REGISTRY}" || echo "⚠️  logout non riuscito: chiudila a mano con 'npm logout'."
+    fi
+}
+trap cleanup EXIT
+
+cd "${REPO_ROOT}/${PACKAGE_PATH}"
+VERSION="$(node -p "require('./package.json').version")"
+
+echo "==============================================="
+echo "Bootstrap npm: ${NPM_NAME}@${VERSION}"
+echo "  repo CI:  ${GITHUB_SLUG}  (workflow ${WORKFLOW})"
+echo "  registry: ${NPM_REGISTRY}"
+echo "==============================================="
+echo ""
+
+if npm whoami --registry "${NPM_REGISTRY}" > /dev/null 2>&1; then
+    echo "✅ Gia' autenticato come $(npm whoami --registry "${NPM_REGISTRY}")."
+    echo "   Sessione preesistente: la lascio aperta a fine script."
+else
+    echo "==> npm login (flusso web nel browser)"
+    npm login --registry "${NPM_REGISTRY}"
+    OWNED_SESSION=1
+    echo "✅ Autenticato come $(npm whoami --registry "${NPM_REGISTRY}"). La chiudo io a fine script."
+fi
+echo ""
+
+# Pubblicazione iniziale, solo se il pacchetto non esiste ancora.
+PUBLISHED=0
+if npm view "${NPM_NAME}" version --registry "${NPM_REGISTRY}" > /dev/null 2>&1; then
+    echo "✅ ${NPM_NAME} esiste gia' su npm, salto la publish."
+else
+    # Stesso criterio del workflow: il dist-tag esce dalla versione.
+    if [[ "${VERSION}" =~ -([a-zA-Z]+) ]]; then
+        TAG="${BASH_REMATCH[1]}"
+    else
+        TAG="latest"
+    fi
+    echo "==> npm publish --access public --tag ${TAG} --registry ${NPM_REGISTRY}"
+    npm publish --access public --tag "${TAG}" --registry "${NPM_REGISTRY}"
+    PUBLISHED=1
+fi
+
+# Il trusted publisher, da configurare a mano una volta sola. Stampato qui con i
+# valori gia' risolti, cosi' si copiano invece di ricostruirli.
+cat <<MSG
+
+===============================================
+Ultimo passo, a mano e una volta sola: il trusted publisher.
+
+  1. apri  https://www.npmjs.com/package/${NPM_NAME}/access
+     (la stessa pagina si raggiunge dal pacchetto -> Settings)
+  2. sezione "Trusted Publisher", scegli GitHub Actions e metti:
+
+       organization or user   ${GITHUB_SLUG%%/*}
+       repository             ${GITHUB_SLUG##*/}
+       workflow filename      ${WORKFLOW}
+
+  3. salva, e lascia al publisher il permesso di pubblicare.
+
+Fatto questo, nessuna release chiedera' piu' un token: 'make release' aggiorna
+versioni e changelog e crea il tag, e al push del tag pubblica la CI.
+
+Se il trusted publisher c'e' gia', qui non c'e' altro da fare.
+===============================================
+MSG
+
+if [ "${PUBLISHED}" = "1" ]; then
+    echo ""
+    echo "ℹ️  Nota: alla primissima publish npm punta anche 'latest' a"
+    echo "   ${VERSION}, qualunque dist-tag tu abbia usato. Si spostera' da se'"
+    echo "   alla prima versione stabile."
+fi

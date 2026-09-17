@@ -1,0 +1,69 @@
+name: Release latest version on PyPI
+
+on:
+  push:
+    tags:
+      - "*"
+  # Permette di ripubblicare un tag senza rifare la release: repoplone crea il
+  # tag ma non pubblica piu' il backend, quindi se questo workflow fallisce la
+  # release e' gia' fatta e va solo ripetuta la publish.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag da pubblicare"
+        required: true
+
+jobs:
+  # Lint e test prima di pubblicare. Non basta la CI: i workflow non si
+  # aspettano fra loro, partono tutti insieme al push del tag, e per giunta
+  # quella sul tag salta ogni job perche' decide dai path modificati, che in un
+  # tag sono zero. Qui sono gli stessi controlli, richiamati dallo stesso
+  # workflow riusabile, cosi' non divergono.
+  #
+  # Nota per il workflow_dispatch: un workflow riusabile gira sempre al commit
+  # di chi lo chiama, quindi i check guardano il ref da cui lanci il workflow,
+  # non l'input `ref` che finisce solo nella checkout della publish.
+  config:
+    uses: ./.github/workflows/config.yml
+
+  checks:
+    name: "Checks"
+    uses: ./.github/workflows/backend.yml
+    needs:
+      - config
+    with:
+      base-tag: ${{ needs.config.outputs.base-tag }}
+      image-name-prefix: ${{ needs.config.outputs.image-name-prefix }}
+      image-name-suffix: backend
+      python-version: ${{ needs.config.outputs.python-version }}
+      plone-version: ${{ needs.config.outputs.plone-version }}
+
+  release_to_pypi:
+    name: Release to PyPI
+    runs-on: ubuntu-latest
+    needs:
+      - checks
+    permissions:
+      contents: read
+      # il token OIDC con cui PyPI riconosce questo workflow come trusted
+      # publisher: e' cio' che sostituisce UV_PUBLISH_TOKEN
+      id-token: write
+    defaults:
+      run:
+        working-directory: @BACKEND_ROOT@
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: false
+
+      - name: Build
+        run: uv build
+
+      - name: Release to PyPI
+        # `always` invece del default `automatic`: senza OIDC il job deve
+        # fallire a voce alta, non ripiegare in silenzio su credenziali assenti
+        run: uv publish --trusted-publishing always
