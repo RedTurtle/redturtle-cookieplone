@@ -1,5 +1,5 @@
 [project]
-name = "plone-addon-rt"
+name = "redturtle-cookieplone"
 version = "1.0.0"
 description = "Genera add-on Plone con cookieplone e ci applica le convenzioni RedTurtle"
 readme = "README.md"
@@ -12,10 +12,17 @@ keywords = ["plone", "volto", "cookieplone", "redturtle"]
 dependencies = []
 
 [project.scripts]
-plone-addon-rt = "plone_addon_rt.cli:main"
+redturtle-cookieplone = "redturtle_cookieplone.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/RedTurtle/plone-addon-rt"
+Homepage = "https://github.com/RedTurtle/redturtle-cookieplone"
+
+[tool.uv]
+# Senza questo, `uvx --from .` riusa la wheel in cache e ignora le modifiche ai
+# sorgenti: uv invalida la build solo sui metadati, e nemmeno --refresh o
+# --reinstall lo smuovono. Cosi' invece un `uvx --from .` durante lo sviluppo
+# esegue davvero il codice che hai davanti.
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }, { file = "src/**/*.tmpl" }]
 
 [build-system]
 requires = ["hatchling"]
@@ -25,4 +32,4 @@ build-backend = "hatchling.build"
 # hatchling porta dentro tutto cio' che sta sotto il package, quindi i .tmpl
 # dell'overlay ci finiscono da se': sono dati del pacchetto, e senza `align`
 # girerebbe installato da git senza i template da scrivere.
-packages = ["src/plone_addon_rt"]
+packages = ["src/redturtle_cookieplone"]

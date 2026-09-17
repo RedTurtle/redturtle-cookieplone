@@ -18,7 +18,7 @@ all'overlay, la domanda da farsi e' se e' vero in tutti gli add-on o solo in uno
 ## Layout
 
 ```
-src/plone_addon_rt/
+src/redturtle_cookieplone/
 ├── cli.py              tutto il codice, un file solo
 └── overlay/*.tmpl      file che l'overlay scrive, con segnaposto @NOME@
 ```

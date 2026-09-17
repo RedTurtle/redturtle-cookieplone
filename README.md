@@ -1,4 +1,4 @@
-# plone-addon-rt
+# RedTurtle Cookieplone
 
 Genera un add-on Plone con [cookieplone](https://github.com/plone/cookieplone) e ci
 applica le convenzioni RedTurtle: backend su `zc.buildout`/setuptools, CI senza i job
@@ -7,13 +7,13 @@ che per un add-on non servono, release di backend e frontend via trusted publish
 Niente da installare:
 
 ```bash
-uvx --from git+https://github.com/RedTurtle/plone-addon-rt plone-addon-rt create -o .
+uvx --from git+https://github.com/RedTurtle/redturtle-cookieplone redturtle-cookieplone create -o .
 ```
 
 Per rigenerare l'identico a mesi di distanza, pinna il tag:
 
 ```bash
-uvx --from git+https://github.com/RedTurtle/plone-addon-rt@v1.0.0 plone-addon-rt create -o .
+uvx --from git+https://github.com/RedTurtle/redturtle-cookieplone@v1.0.0 redturtle-cookieplone create -o .
 ```
 
 Serve `uv >= 0.4`, `git`, e per il frontend `make`, `node`, `jq`.
@@ -27,7 +27,7 @@ Serve `uv >= 0.4`, `git`, e per il frontend `make`, `node`, `jq`.
 | `prompts` | stampa le domande del wizard, in JSON |
 
 `--dry-run` e' un flag **globale**: va prima del sottocomando
-(`plone-addon-rt --dry-run align <repo>`).
+(`redturtle-cookieplone --dry-run align <repo>`).
 
 ## create
 
@@ -35,7 +35,7 @@ Senza opzioni, le domande le fa il wizard di cookieplone, poi lo script prosegue
 solo. E' il modo da usare a mano.
 
 ```bash
-plone-addon-rt create -o .
+redturtle-cookieplone create -o .
 ```
 
 Fa in sequenza, fermandosi al primo errore: `cookieplone` → `align` → `scope` →
@@ -45,7 +45,7 @@ Non interattivo, con `--title` (servono anche `--description`, `--project-slug`,
 `--github-organization`):
 
 ```bash
-plone-addon-rt create \
+redturtle-cookieplone create \
   --title "RER Linkchecker" --description "..." \
   --project-slug rer-linkchecker --python-package-name rer.linkchecker \
   --github-organization RegioneER \
@@ -74,7 +74,7 @@ un add-on nuovo non e' integrabile in io-Comune finche' la migrazione non e' fat
 ## align
 
 ```bash
-plone-addon-rt align <repo>
+redturtle-cookieplone align <repo>
 ```
 
 Idempotente. Fa otto cose:
@@ -103,7 +103,7 @@ Al contrario il lockfile va rigenerato, e `align` avvisa.
 Con `create --scope` non serve. Su un repo gia' generato senza scope:
 
 ```bash
-plone-addon-rt scope <repo> --scope @redturtle
+redturtle-cookieplone scope <repo> --scope @redturtle
 ```
 
 Rinomina solo dove il nome e' un nome e non un path: la cartella
@@ -177,7 +177,7 @@ Per sviluppare un add-on non ancora rilasciato dentro io-Comune o derivati. Mett
 checkout sotto `src/addons/` dell'ospite, poi:
 
 ```bash
-plone-addon-rt integrate <progetto-ospite> <path-addon> --theme <addon-tema>
+redturtle-cookieplone integrate <progetto-ospite> <path-addon> --theme <addon-tema>
 ```
 
 Aggiunge il workspace yarn, il path in `jsconfig.json`, la dichiarazione nel tema, le
@@ -199,7 +199,7 @@ Deve dare `isRegisteredAddon: true` e `isPublishedPackage: false`.
 ## prompts
 
 ```bash
-plone-addon-rt prompts [template] [--tag <branch|tag|sha>]
+redturtle-cookieplone prompts [template] [--tag <branch|tag|sha>]
 ```
 
 JSON con `key`, `prompt`, `help`, `type`, `default`, `choices`, `derived` per ogni
@@ -219,7 +219,7 @@ Template: `project`, `monorepo_addon`, `backend_addon`, `frontend_addon`,
 - **Il repo generato ha un `git init` senza commit**: il primo commit lo fai tu.
 - **Per vedere il diff di `align`** serve una baseline, perche' tutto e' untracked:
   `git -C <repo> add -A` (senza commit), poi `align`, poi `git diff`.
-- `plone-addon-rt align <repo> --dry-run` fallisce: `--dry-run` va prima del
+- `redturtle-cookieplone align <repo> --dry-run` fallisce: `--dry-run` va prima del
   sottocomando.
 
 ## Variabili d'ambiente

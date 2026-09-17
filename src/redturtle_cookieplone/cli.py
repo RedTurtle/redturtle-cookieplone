@@ -3,8 +3,8 @@
 Usa solo la stdlib, quindi non c'e' niente da installare: `uvx` sa costruire
 un pacchetto direttamente da un repo git, anche pinnato su un tag.
 
-  uvx --from git+https://github.com/RedTurtle/plone-addon-rt plone-addon-rt create -o .
-  uvx --from git+https://github.com/RedTurtle/plone-addon-rt@v1.0.0 plone-addon-rt create -o .
+  uvx --from git+https://github.com/RedTurtle/redturtle-cookieplone redturtle-cookieplone create -o .
+  uvx --from git+https://github.com/RedTurtle/redturtle-cookieplone@v1.0.0 redturtle-cookieplone create -o .
 
 Senza --title, `create` lascia fare le domande al wizard interattivo di
 cookieplone (dalla 2.0 e' un form tui-forms, con pagina di conferma e
@@ -64,7 +64,7 @@ try:
 except ModuleNotFoundError:  # Python < 3.11
     tomllib = None
 
-SETUP_PY_TEMPLATE = '''\
+SETUP_PY_TEMPLATE = """\
 try:
     from setuptools import setup
 except ImportError:
@@ -83,16 +83,16 @@ setup(
 {classifiers}
     ],
 )
-'''
+"""
 
-SETUPTOOLS_BLOCK = '''\
+SETUPTOOLS_BLOCK = """\
 [tool.setuptools]
 package-dir = {{"" = "src"}}
 
 [tool.setuptools.dynamic]
 version = {{attr = "{dotted_name}.__version__"}}
 
-'''
+"""
 
 # Job delle workflow generate che per un add-on non hanno senso.
 CI_JOBS_TO_DROP = {
@@ -205,7 +205,9 @@ class Report:
         if not count:
             print(f"{DIM}Niente da fare: era gia' tutto a posto.{RESET}")
         elif self.dry_run:
-            print(f"{YELLOW}{count} modifiche da applicare{RESET} {DIM}(dry-run, nulla scritto){RESET}")
+            print(
+                f"{YELLOW}{count} modifiche da applicare{RESET} {DIM}(dry-run, nulla scritto){RESET}"
+            )
         else:
             print(f"{GREEN}{count} modifiche applicate.{RESET}")
         return 0
@@ -214,6 +216,7 @@ class Report:
 # --------------------------------------------------------------------------
 # lettura metadati
 # --------------------------------------------------------------------------
+
 
 def read_repository_toml(repo: Path) -> dict:
     """Legge repository.toml, anche dove `python3` e' piu' vecchio di 3.11.
@@ -262,6 +265,7 @@ def backend_dotted_name(meta: dict) -> str:
 # sottocomando: buildout
 # --------------------------------------------------------------------------
 
+
 def patch_pyproject(path: Path, dotted_name: str, python_max: str, rep: Report) -> str:
     """Rende pyproject.toml installabile da setuptools/zc.buildout.
 
@@ -288,7 +292,11 @@ def patch_pyproject(path: Path, dotted_name: str, python_max: str, rep: Report) 
     if "<" not in requires_python:
         upper = _next_minor(python_max)
         requires_python = f"{requires_python},<{upper}"
-        text = text[: match.start()] + f'requires-python = "{requires_python}"' + text[match.end():]
+        text = (
+            text[: match.start()]
+            + f'requires-python = "{requires_python}"'
+            + text[match.end() :]
+        )
 
     # 3. Configurazione setuptools accanto a quella hatchling.
     if "[tool.setuptools]" not in text:
@@ -318,7 +326,9 @@ def patch_setup_py(path: Path, requires_python: str, rep: Report) -> None:
     )
     rep.write(
         path,
-        SETUP_PY_TEMPLATE.format(requires_python=requires_python, classifiers=classifiers),
+        SETUP_PY_TEMPLATE.format(
+            requires_python=requires_python, classifiers=classifiers
+        ),
     )
 
 
@@ -387,7 +397,7 @@ def disable_publish(repo: Path, section_name: str, workflow: str, rep: Report) -
         return
     end = text.find("\n[", match.end())
     end = len(text) if end == -1 else end
-    section = text[match.start():end]
+    section = text[match.start() : end]
     if "publish = false" in section:
         rep.already(f"repository.toml: {label} gia' escluso dalla release locale")
         return
@@ -534,7 +544,9 @@ def volto_published_deps(version: str) -> dict:
     return found
 
 
-def pin_workspace_devdeps(repo: Path, meta: dict, version: str | None, rep: Report) -> None:
+def pin_workspace_devdeps(
+    repo: Path, meta: dict, version: str | None, rep: Report
+) -> None:
     """Sostituisce `workspace:*` con le versioni pubblicate, nel package.json dell'add-on.
 
     Trappola che si manifesta solo alla prima release, cioe' nel momento
@@ -701,8 +713,7 @@ def print_npm_bootstrap(repo: Path, meta: dict) -> None:
 
     backend_name = meta.get("backend", {}).get("package", {}).get("name", "il backend")
 
-    print(
-        f"""
+    print(f"""
 Prossimi passi
 
   pending publisher     una tantum, a mano su pypi.org -> Publishing: progetto
@@ -724,8 +735,7 @@ Prossimi passi
 Lo slug {slug} viene dal remote git. Il binding OIDC e' sensibile alle
 maiuscole, quindi se il remote non e' ancora quello definitivo rilancia `align`
 dopo averlo sistemato.
-"""
-    )
+""")
 
 
 def _github_slug(repo: Path, meta: dict) -> str:
@@ -755,13 +765,16 @@ def _git_remote_slug(repo: Path) -> str | None:
         )
     except (OSError, subprocess.CalledProcessError):
         return None
-    match = re.search(r"github\.com[:/]+([^/]+/[^/]+?)(?:\.git)?$", result.stdout.strip())
+    match = re.search(
+        r"github\.com[:/]+([^/]+/[^/]+?)(?:\.git)?$", result.stdout.strip()
+    )
     return match.group(1) if match else None
 
 
 # --------------------------------------------------------------------------
 # sottocomando: integrate
 # --------------------------------------------------------------------------
+
 
 def cmd_integrate(args: argparse.Namespace) -> int:
     host = Path(args.host).resolve()
@@ -824,7 +837,9 @@ def cmd_integrate(args: argparse.Namespace) -> int:
     else:
         paths[npm_name] = [src_alias]
         rep.did(f"jsconfig.json: aggiunto path {npm_name}")
-        rep.write(jsconfig_path, json.dumps(jsconfig, indent=2, ensure_ascii=False) + "\n")
+        rep.write(
+            jsconfig_path, json.dumps(jsconfig, indent=2, ensure_ascii=False) + "\n"
+        )
 
     # 4. Catena addon: il tema lo dichiara, la root lo eredita.
     theme_pkg_path = host / "src" / "addons" / args.theme / "package.json"
@@ -847,7 +862,10 @@ def cmd_integrate(args: argparse.Namespace) -> int:
             touched = True
             rep.did(f"{args.theme}: aggiunta dependency {npm_name}@{version}")
         if touched:
-            rep.write(theme_pkg_path, json.dumps(theme_pkg, indent=2, ensure_ascii=False) + "\n")
+            rep.write(
+                theme_pkg_path,
+                json.dumps(theme_pkg, indent=2, ensure_ascii=False) + "\n",
+            )
     else:
         rep.already(f"{theme_pkg_path}: assente, salto la catena addon")
 
@@ -894,7 +912,9 @@ def cmd_prompts(args: argparse.Namespace) -> int:
     templates = index["templates"]
     if args.template not in templates:
         visible = [k for k, v in templates.items() if not v.get("hidden")]
-        sys.exit(f"template sconosciuto: {args.template}. Disponibili: {', '.join(visible)}")
+        sys.exit(
+            f"template sconosciuto: {args.template}. Disponibili: {', '.join(visible)}"
+        )
 
     path = templates[args.template]["path"].lstrip("./")
     if version == 2:
@@ -906,7 +926,12 @@ def cmd_prompts(args: argparse.Namespace) -> int:
 
     print(
         json.dumps(
-            {"template": args.template, "path": path, "format": version, "questions": questions},
+            {
+                "template": args.template,
+                "path": path,
+                "format": version,
+                "questions": questions,
+            },
             indent=2,
         )
     )
@@ -973,7 +998,9 @@ def _questions_v1(config: dict) -> list[dict]:
             entry["choices"] = value
             entry["default"] = value[0]
             if isinstance(label, dict):
-                entry["choice_labels"] = {k: v for k, v in label.items() if k != "__prompt__"}
+                entry["choice_labels"] = {
+                    k: v for k, v in label.items() if k != "__prompt__"
+                }
         questions.append(entry)
     return questions
 
@@ -991,6 +1018,7 @@ def _read_template_file(relative: str, tag: str) -> str:
 # --------------------------------------------------------------------------
 # helper versioni Python
 # --------------------------------------------------------------------------
+
 
 def _next_minor(version: str) -> str:
     major, minor = version.split(".")[:2]
@@ -1021,13 +1049,13 @@ def _minor_range(lower: str, upper_exclusive: str) -> list[str]:
 # ADDON_NAME in `frontend/packages/${ADDON_NAME}` e npm.yml lo usa come
 # working-directory.
 SCOPE_FILES = [
-    "{pkg}/package.json",        # name
-    "{pkg}/tsconfig.json",       # chiave in paths
-    "{fe}/package.json",         # dipendenza workspace:* e ogni pnpm --filter
-    "{fe}/volto.config.js",      # elemento dell'array addons
-    "{fe}/.eslintrc.js",         # chiave dell'alias (il target e' un path)
-    "{fe}/README.md",            # badge e istruzioni d'installazione
-    "repository.toml",           # name in [frontend.package]
+    "{pkg}/package.json",  # name
+    "{pkg}/tsconfig.json",  # chiave in paths
+    "{fe}/package.json",  # dipendenza workspace:* e ogni pnpm --filter
+    "{fe}/volto.config.js",  # elemento dell'array addons
+    "{fe}/.eslintrc.js",  # chiave dell'alias (il target e' un path)
+    "{fe}/README.md",  # badge e istruzioni d'installazione
+    "repository.toml",  # name in [frontend.package]
     "scripts/bootstrap-npm.sh",  # NPM_NAME (PACKAGE_PATH e' un path)
 ]
 
@@ -1070,7 +1098,9 @@ def pin_publish_registry(path: Path, scope: str, registry: str, rep: Report) -> 
         return
     key = f"{scope}:registry"
     text = path.read_text()
-    if re.search(r'"' + re.escape(key) + r'"\s*:\s*"' + re.escape(registry) + '"', text):
+    if re.search(
+        r'"' + re.escape(key) + r'"\s*:\s*"' + re.escape(registry) + '"', text
+    ):
         rep.already(f'package.json: "{key}" gia\' fissato')
         return
 
@@ -1083,7 +1113,7 @@ def pin_publish_registry(path: Path, scope: str, registry: str, rep: Report) -> 
         new_text = (
             text[: plain.start()]
             + f'\n{plain.group(1)}"{key}"{plain.group(2)}{registry}"'
-            + text[plain.end():]
+            + text[plain.end() :]
         )
         verb = "correggerei" if rep.dry_run else "corretta"
         msg = f'package.json: {verb} "registry" -> "{key}"'
@@ -1093,7 +1123,11 @@ def pin_publish_registry(path: Path, scope: str, registry: str, rep: Report) -> 
             rep.already("package.json: nessun publishConfig, non lo tocco")
             return
         indent = match.group(2) + "  "
-        new_text = text[: match.end()] + f'{indent}"{key}": "{registry}",\n' + text[match.end():]
+        new_text = (
+            text[: match.end()]
+            + f'{indent}"{key}": "{registry}",\n'
+            + text[match.end() :]
+        )
         verb = "aggiungerei" if rep.dry_run else "aggiunto"
         msg = f'package.json: {verb} "{key}" = {registry}'
 
@@ -1109,7 +1143,9 @@ def cmd_scope(args: argparse.Namespace) -> int:
     current = frontend.get("name")
     package_path = frontend.get("path")
     if not current or not package_path:
-        sys.exit("repository.toml non dichiara [frontend.package]: niente da rinominare.")
+        sys.exit(
+            "repository.toml non dichiara [frontend.package]: niente da rinominare."
+        )
 
     scope = args.scope if args.scope.startswith("@") else f"@{args.scope}"
     bare = current.split("/", 1)[1] if current.startswith("@") else current
@@ -1140,12 +1176,13 @@ def cmd_scope(args: argparse.Namespace) -> int:
         rep.did(f"{rel}: {verb} {count} occorrenze")
 
     renamed = bool(rep.changed)
-    pin_publish_registry(repo / package_path / "package.json", scope, args.registry, rep)
+    pin_publish_registry(
+        repo / package_path / "package.json", scope, args.registry, rep
+    )
 
     code = rep.summary()
     if renamed and not args.dry_run:
-        print(
-            f"""
+        print(f"""
 Ora e' obbligatorio rigenerare il lockfile, perche' la CI gira con
 --frozen-lockfile e il rename lo ha invalidato:
 
@@ -1157,8 +1194,7 @@ serve, altrimenti npm lo pubblicherebbe `restricted`.
 
 Prerequisito esterno: l'organizzazione {scope} deve esistere su npm e l'utente
 deve avere i permessi di publish.
-"""
-        )
+""")
     return code
 
 
@@ -1277,7 +1313,9 @@ def cmd_create(args: argparse.Namespace) -> int:
     npm_package_name = args.npm_package_name or _default_npm_package_name(
         args.python_package_name
     )
-    npm_package_name = scoped_npm_name(npm_package_name, args.scope) if npm_package_name else None
+    npm_package_name = (
+        scoped_npm_name(npm_package_name, args.scope) if npm_package_name else None
+    )
 
     # Le risposte passano da un answers file invece che da `chiave=valore` sulla
     # riga di comando: cookieplone 2.0 lo legge con --answers-file, e' lo stesso
@@ -1303,11 +1341,20 @@ def cmd_create(args: argparse.Namespace) -> int:
     if not interactive:
         answers["initialize_documentation"] = "1" if args.docs else "0"
 
-    answers_path = Path(tempfile.mkdtemp(prefix="plone-addon-rt-")) / ".cookieplone.json"
+    answers_path = (
+        Path(tempfile.mkdtemp(prefix="redturtle-cookieplone-")) / ".cookieplone.json"
+    )
     if not args.dry_run:
         answers_path.write_text(json.dumps(answers, indent=4) + "\n")
 
-    cmd = ["uvx", "cookieplone", "-o", str(out_dir), "--answers-file", str(answers_path)]
+    cmd = [
+        "uvx",
+        "cookieplone",
+        "-o",
+        str(out_dir),
+        "--answers-file",
+        str(answers_path),
+    ]
     if not interactive:
         cmd.append("--no-input")
 
@@ -1317,7 +1364,10 @@ def cmd_create(args: argparse.Namespace) -> int:
         return 0
 
     print("=" * 70)
-    print("1/4  cookieplone" + ("  (rispondi alle domande)" if interactive else f"  -> {repo}"))
+    print(
+        "1/4  cookieplone"
+        + ("  (rispondi alle domande)" if interactive else f"  -> {repo}")
+    )
     print("=" * 70)
     before = _subdirs(out_dir)
     _run(cmd)
@@ -1399,8 +1449,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     print("\n" + "=" * 70)
     print(f"Pronto: {repo}")
     print("=" * 70)
-    print(
-        """
+    print("""
 Da verificare (nessuno e' stato lanciato da qui):
 
   make -C backend install
@@ -1408,28 +1457,36 @@ Da verificare (nessuno e' stato lanciato da qui):
 
 Poi, una tantum e prima della prima release: `make bootstrap-npm`.
 Il repo ha un `git init` senza commit: il primo commit lo fai tu.
-"""
-    )
+""")
     return 0
 
 
 # --------------------------------------------------------------------------
 
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="plone-addon-rt",
+        prog="redturtle-cookieplone",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--dry-run", action="store_true", help="mostra le modifiche senza scriverle")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="mostra le modifiche senza scriverle"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("prompts", help="estrae le domande del wizard dal template cookieplone")
-    p.add_argument("template", nargs="?", default="monorepo_addon", help="nome CLI del template")
+    p = sub.add_parser(
+        "prompts", help="estrae le domande del wizard dal template cookieplone"
+    )
+    p.add_argument(
+        "template", nargs="?", default="monorepo_addon", help="nome CLI del template"
+    )
     p.add_argument("--tag", default="main", help="branch/tag/sha del repo dei template")
     p.set_defaults(func=cmd_prompts)
 
-    p = sub.add_parser("align", help="allinea un monorepo appena generato alle convenzioni RedTurtle")
+    p = sub.add_parser(
+        "align", help="allinea un monorepo appena generato alle convenzioni RedTurtle"
+    )
     p.add_argument("repo", help="root del monorepo generato")
     p.add_argument(
         "--python-max",
@@ -1444,9 +1501,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.set_defaults(func=cmd_align)
 
-    p = sub.add_parser("scope", help="rinomina il pacchetto npm sotto uno scope (es. @redturtle)")
+    p = sub.add_parser(
+        "scope", help="rinomina il pacchetto npm sotto uno scope (es. @redturtle)"
+    )
     p.add_argument("repo", help="root del monorepo")
-    p.add_argument("--scope", required=True, help="scope npm, con o senza @ (es. @redturtle)")
+    p.add_argument(
+        "--scope", required=True, help="scope npm, con o senza @ (es. @redturtle)"
+    )
     p.add_argument(
         "--registry",
         default="https://registry.npmjs.org/",
@@ -1474,10 +1535,15 @@ def main(argv: list[str] | None = None) -> int:
         help="un .cookieplone.json da cui partire (le opzioni qui sopra vincono)",
     )
     p.add_argument(
-        "-o", "--output-dir", dest="output_dir", default=".",
+        "-o",
+        "--output-dir",
+        dest="output_dir",
+        default=".",
         help="directory genitore (default: quella corrente)",
     )
-    p.add_argument("--scope", default=None, help="scope npm da applicare subito (es. @redturtle)")
+    p.add_argument(
+        "--scope", default=None, help="scope npm da applicare subito (es. @redturtle)"
+    )
     p.add_argument(
         "--registry",
         default="https://registry.npmjs.org/",
@@ -1487,13 +1553,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--docs", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--template", default="monorepo_addon")
     p.add_argument("--python-max", default="3.13", dest="python_max")
-    p.add_argument("--no-install", action="store_true", help="salta il pnpm install finale")
+    p.add_argument(
+        "--no-install", action="store_true", help="salta il pnpm install finale"
+    )
     p.set_defaults(func=cmd_create)
 
-    p = sub.add_parser("integrate", help="collega l'add-on a un progetto Volto 17 con yarn workspaces")
+    p = sub.add_parser(
+        "integrate", help="collega l'add-on a un progetto Volto 17 con yarn workspaces"
+    )
     p.add_argument("host", help="root del progetto Volto ospite")
-    p.add_argument("addon", help="root del checkout dell'add-on, dentro src/addons dell'ospite")
-    p.add_argument("--theme", required=True, help="add-on tema che deve dichiarare la dipendenza (es. rer-theme)")
+    p.add_argument(
+        "addon", help="root del checkout dell'add-on, dentro src/addons dell'ospite"
+    )
+    p.add_argument(
+        "--theme",
+        required=True,
+        help="add-on tema che deve dichiarare la dipendenza (es. rer-theme)",
+    )
     p.set_defaults(func=cmd_integrate)
 
     args = parser.parse_args(argv)
