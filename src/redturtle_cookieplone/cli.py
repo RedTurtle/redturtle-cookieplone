@@ -421,6 +421,11 @@ def add_release_flow(repo: Path, meta: dict, rep: Report) -> None:
     release = (
         overlay_text("release.sh.tmpl")
         .replace("@PROJECT_NAME@", meta.get("repository", {}).get("name", repo.name))
+        .replace("@NPM_NAME@", frontend["name"])
+        .replace(
+            "@BACKEND_NAME@",
+            meta.get("backend", {}).get("package", {}).get("name", "il backend"),
+        )
         .replace("@FRONTEND_ROOT@", package_path.split("/")[0])
     )
     rep.write(repo / "scripts" / "release.sh", release)
@@ -696,7 +701,9 @@ def cmd_align(args: argparse.Namespace) -> int:
         )
 
     code = rep.summary()
-    if package_path:
+    # Chiamato da `create`, questo blocco lo stampa lui alla fine: qui sarebbe
+    # il passo 2 di 4, e lo scroll di `make install` lo porterebbe via.
+    if package_path and not getattr(args, "defer_next_steps", False):
         print_npm_bootstrap(repo, meta)
     return code
 
@@ -1415,6 +1422,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         # Di norma None: la Volto la ridice mrs.developer.json, che cookieplone
         # ha appena scritto con la risposta vera del wizard.
         volto_version=args.volto_version,
+        defer_next_steps=True,
         dry_run=False,
     )
     if cmd_align(align_args) != 0:
@@ -1460,9 +1468,12 @@ Da verificare (nessuno e' stato lanciato da qui):
   make -C backend install
   make -C frontend build
 
-Poi, una tantum e prima della prima release: `make bootstrap-npm`.
 Il repo ha un `git init` senza commit: il primo commit lo fai tu.
 """)
+    # In coda, come ultima cosa a schermo: sono i passi che vanno fatti a mano e
+    # fuori da qui, e finche' non sono fatti la prima release non funziona.
+    if package_path:
+        print_npm_bootstrap(repo, meta)
     return 0
 
 

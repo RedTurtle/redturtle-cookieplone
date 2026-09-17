@@ -15,6 +15,29 @@ echo "==============================================="
 echo "Release @PROJECT_NAME@"
 echo "==============================================="
 
+# Promemoria, non un controllo: la configurazione del trusted publishing si
+# vede alla generazione del repo, che puo' essere di mesi prima, e non nel
+# momento in cui serve. Se manca, i workflow falliscono a tag GIA' creato.
+# Non blocca di proposito: lo stato npm sarebbe verificabile, quello del
+# pending publisher PyPI no, e una release legittima non deve dipendere da
+# mezza verifica.
+cat <<'PREREQ'
+
+Prerequisiti di pubblicazione, una tantum (non verificati qui)
+
+  npm    @NPM_NAME@
+         il pacchetto deve esistere su npm e avere il trusted publisher
+         puntato su `npm.yml`. Se non l'hai mai fatto:  make bootstrap-npm
+
+  PyPI   @BACKEND_NAME@
+         serve un pending publisher su pypi.org -> Publishing, con workflow
+         `pypi.yml`. PyPI lo accetta anche prima che il progetto esista.
+
+Senza, il tag viene creato e le publish falliscono: in quel caso non rifare la
+release, rilancia da GitHub Actions il workflow fallito passando il tag.
+
+PREREQ
+
 # Nessun token richiesto per pubblicare. Resta opzionale GITHUB_TOKEN, che
 # serve solo a creare la GitHub release: senza, repoplone la salta e avvisa.
 

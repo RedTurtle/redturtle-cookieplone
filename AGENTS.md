@@ -89,6 +89,24 @@ preferire, e per cui non serve piu' fare l'intervista da fuori.
 **pacchetto**, non nei template: `--tag <sha>` da solo non basta a tornare indietro,
 servirebbe anche pinnare una cookieplone piu' vecchia.
 
+## Dove va l'output che l'utente deve leggere
+
+`print_npm_bootstrap()` elenca i due setup una tantum (pending publisher PyPI,
+`make bootstrap-npm`) senza cui la prima release non funziona. Va stampato **per
+ultimo**, non dove viene prodotto: chiamato dentro `create` sarebbe la fine del passo
+2 di 4, e lo scroll di `make install` lo porterebbe via. Per questo `cmd_align` lo
+salta quando `args.defer_next_steps` e' vero, e `cmd_create` lo stampa in coda.
+
+Stessa ragione per il promemoria in testa a `scripts/release.sh`: la configurazione
+del trusted publishing si vede alla generazione del repo, che puo' essere di mesi
+prima del primo `make release`. E' un promemoria e non un controllo di proposito —
+lo stato npm sarebbe verificabile (`npm view` esce 1 se il pacchetto non c'e'), quello
+del pending publisher PyPI no, e una release legittima non deve dipendere da mezza
+verifica.
+
+Regola generale: se un'informazione serve **al momento di agire**, va stampata li',
+non dove il codice la calcola.
+
 ## Il criterio del rename sotto scope
 
 Nel repo lo stesso identificatore compare **sia come nome sia come path**. Si sostituisce
