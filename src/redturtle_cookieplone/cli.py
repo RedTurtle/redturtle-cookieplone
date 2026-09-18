@@ -489,22 +489,67 @@ def remove_job(text: str, name: str) -> str:
 
 
 def remove_needs_entry(text: str, name: str) -> str:
-    """Toglie `- <name>` dalle liste `needs:`, lasciando intatto il resto."""
-    lines = text.splitlines(keepends=True)
+    """Toglie `<name>` dalle liste `needs:`, in tutte le forme che YAML ammette.
+
+    Lasciarne una dentro un `needs:` senza il job corrispondente non e' un
+    dettaglio cosmetico: GitHub rifiuta il file con
+    *Job 'report' depends on unknown job 'release'* e l'intera workflow non
+    parte.
+
+    Le forme gestite sono il blocco
+
+        needs:
+          - lint
+          - release
+
+    la lista inline `needs: [lint, release]` e lo scalare `needs: release`.
+
+    Il blocco **non** finisce alla prima riga che non e' un elemento: commenti e
+    righe vuote ci stanno dentro e vanno attraversati. Su
+    `collective.rercaptcha`, dove il job `storybook` era stato commentato a
+    mano, un `# - storybook` in mezzo alla lista chiudeva il blocco troppo
+    presto e il `- release` successivo sopravviveva, con la CI che si rifiutava
+    di partire.
+    """
     item = re.compile(rf"^\s*-\s*{re.escape(name)}\s*$")
+    # Dentro il blocco ci si resta su elementi, commenti e righe vuote.
+    inside = re.compile(r"^\s*(?:-\s|#)|^\s*$")
     out: list[str] = []
     in_needs = False
-    for line in lines:
-        if re.match(r"^\s*needs:\s*$", line):
+
+    for line in text.splitlines(keepends=True):
+        block = re.match(r"^(\s*)needs:\s*$", line)
+        if block:
             in_needs = True
             out.append(line)
             continue
+
+        inline = re.match(r"^(\s*needs:\s*)\[(.*)\](\s*)$", line)
+        if inline:
+            kept = [
+                part.strip()
+                for part in inline.group(2).split(",")
+                if part.strip() and part.strip() != name
+            ]
+            # Senza piu' nessuna dipendenza la chiave va via del tutto: un
+            # `needs: []` e' valido ma dice una cosa diversa da "nessun needs".
+            if kept:
+                out.append(f"{inline.group(1)}[{', '.join(kept)}]{inline.group(3)}")
+            continue
+
+        scalar = re.match(r"^\s*needs:\s*([\w-]+)\s*$", line)
+        if scalar:
+            if scalar.group(1) != name:
+                out.append(line)
+            continue
+
         if in_needs:
             if item.match(line):
                 continue
-            if not re.match(r"^\s*-\s", line):
+            if not inside.match(line):
                 in_needs = False
         out.append(line)
+
     return "".join(out)
 
 
