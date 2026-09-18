@@ -266,10 +266,13 @@ def backend_dotted_name(meta: dict) -> str:
 # --------------------------------------------------------------------------
 
 
-def patch_pyproject(path: Path, dotted_name: str, python_max: str, rep: Report) -> str:
+def patch_pyproject(
+    path: Path, dotted_name: str, rep: Report
+) -> tuple[str, list[str]]:
     """Rende pyproject.toml installabile da setuptools/zc.buildout.
 
-    Restituisce il valore finale di requires-python, che serve a setup.py.
+    Restituisce `requires-python` e le versioni di Python dichiarate nei trove
+    classifier, che sono quello che serve a `setup.py`.
     """
     text = path.read_text()
     original = text
@@ -283,15 +286,25 @@ def patch_pyproject(path: Path, dotted_name: str, python_max: str, rep: Report) 
         flags=re.MULTILINE,
     )
 
-    # 2. Vincolo superiore su requires-python, altrimenti buildout prova
-    #    interpreti non supportati.
+    # 2. Nessun vincolo superiore su requires-python, e via quello che le
+    #    versioni precedenti di questo comando ci scrivevano.
+    #
+    #    Un `<3.x` fisso va fuori sincrono da se': i trove classifier li
+    #    aggiorna upstream quando Plone supporta un Python nuovo, e allora
+    #    `check-python-versions`, che nel job `Backend: Lint` confronta le due
+    #    cose, fa fallire la CI con
+    #
+    #        pyproject.toml says:    3.11, 3.12, 3.13, 3.14
+    #        - python_requires says: 3.11, 3.12, 3.13
+    #        mismatch!
+    #
+    #    Succedeva davvero su collective.rercaptcha. Senza il bound le due
+    #    fonti non possono divergere, ed e' anche la forma che genera upstream.
     match = re.search(r'^requires-python = "([^"]+)"$', text, flags=re.MULTILINE)
     if not match:
         sys.exit(f"{path}: requires-python non trovato.")
-    requires_python = match.group(1)
-    if "<" not in requires_python:
-        upper = _next_minor(python_max)
-        requires_python = f"{requires_python},<{upper}"
+    requires_python = re.sub(r"\s*,\s*<\s*\d+\.\d+", "", match.group(1))
+    if requires_python != match.group(1):
         text = (
             text[: match.start()]
             + f'requires-python = "{requires_python}"'
@@ -315,12 +328,19 @@ def patch_pyproject(path: Path, dotted_name: str, python_max: str, rep: Report) 
         rep.already(f"{path}: gia' adattato a setuptools")
     else:
         rep.write(path, text)
-    return requires_python
+
+    # I classifier sono di upstream e non si toccano: sono la fonte, e setup.py
+    # li ricopia. Prima la direzione era opposta — dal cap ai classifier — ed e'
+    # per questo che le due potevano disallinearsi.
+    versions = re.findall(r'"Programming Language :: Python :: (\d+\.\d+)"', text)
+    if not versions:
+        warn(f"{path}: nessun trove classifier di Python, setup.py resta senza.")
+    return requires_python, versions
 
 
-def patch_setup_py(path: Path, requires_python: str, rep: Report) -> None:
-    lower, upper = _python_bounds(requires_python)
-    versions = _minor_range(lower, upper)
+def patch_setup_py(
+    path: Path, requires_python: str, versions: list[str], rep: Report
+) -> None:
     classifiers = "\n".join(
         f'        "Programming Language :: Python :: {v}",' for v in versions
     )
@@ -765,10 +785,10 @@ def cmd_align(args: argparse.Namespace) -> int:
 
     print(f"Allineamento di {repo}  (pacchetto {dotted_name})\n")
     rep = Report(args.dry_run)
-    requires_python = patch_pyproject(
-        backend / "pyproject.toml", dotted_name, args.python_max, rep
+    requires_python, python_versions = patch_pyproject(
+        backend / "pyproject.toml", dotted_name, rep
     )
-    patch_setup_py(backend / "setup.py", requires_python, rep)
+    patch_setup_py(backend / "setup.py", requires_python, python_versions, rep)
     patch_ci(repo, rep)
 
     backend_path = meta.get("backend", {}).get("package", {}).get("path", "backend")
@@ -1111,25 +1131,6 @@ def _read_template_file(relative: str, tag: str) -> str:
 # --------------------------------------------------------------------------
 # helper versioni Python
 # --------------------------------------------------------------------------
-
-
-def _next_minor(version: str) -> str:
-    major, minor = version.split(".")[:2]
-    return f"{major}.{int(minor) + 1}"
-
-
-def _python_bounds(requires_python: str) -> tuple[str, str]:
-    lower = re.search(r">=\s*(\d+\.\d+)", requires_python)
-    upper = re.search(r"<\s*(\d+\.\d+)", requires_python)
-    if not lower or not upper:
-        sys.exit(f"requires-python non interpretabile: {requires_python!r}")
-    return lower.group(1), upper.group(1)
-
-
-def _minor_range(lower: str, upper_exclusive: str) -> list[str]:
-    major, low = lower.split(".")
-    _, high = upper_exclusive.split(".")
-    return [f"{major}.{m}" for m in range(int(low), int(high))]
 
 
 # --------------------------------------------------------------------------
@@ -1535,7 +1536,6 @@ def cmd_create(args: argparse.Namespace) -> int:
     print("=" * 70)
     align_args = argparse.Namespace(
         repo=str(repo),
-        python_max=args.python_max,
         # Di norma None: la Volto la ridice mrs.developer.json, che cookieplone
         # ha appena scritto con la risposta vera del wizard.
         volto_version=args.volto_version,
@@ -1628,11 +1628,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("repo", help="root del monorepo generato")
     p.add_argument(
-        "--python-max",
-        default="3.13",
-        help="ultima minor di Python supportata (default: 3.13)",
-    )
-    p.add_argument(
         "--volto-version",
         dest="volto_version",
         help="Volto da cui ricavare le versioni delle devDependencies "
@@ -1691,7 +1686,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--container-registry", default="github", dest="container_registry")
     p.add_argument("--docs", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--template", default="monorepo_addon")
-    p.add_argument("--python-max", default="3.13", dest="python_max")
     p.add_argument(
         "--no-install", action="store_true", help="salta il pnpm install finale"
     )

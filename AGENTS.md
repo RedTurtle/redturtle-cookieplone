@@ -262,6 +262,31 @@ cosi' copre qualunque cosa upstream lasci non formattata, adesso e in futuro, co
 regola del repo e non con la nostra. Verificato su un repo pristine: sistema quel file
 e non tocca nient'altro.
 
+### `requires-python` non vuole un limite superiore
+
+Le versioni precedenti di questo comando mettevano `requires-python = ">=3.11,<3.14"`,
+con un `--python-max` fisso. I trove classifier li aggiorna **upstream** quando Plone
+supporta un Python nuovo, e nel job `Backend: Lint`
+`check-python-versions --only pyproject.toml` confronta le due cose:
+
+```
+pyproject.toml says:    3.11, 3.12, 3.13, 3.14
+- python_requires says: 3.11, 3.12, 3.13
+mismatch!
+```
+
+Succedeva su `collective.rercaptcha`, i cui classifier sono arrivati a 3.14.
+
+Il difetto era la **direzione della derivazione**: dal cap ai classifier di
+`setup.py`, mentre quelli di `pyproject.toml` non li guardavamo. Ora i classifier di
+`pyproject.toml` sono la fonte, `patch_pyproject()` li restituisce e `setup.py` li
+ricopia; l'upper bound non si mette e, se scritto da una versione precedente, si
+rimuove. Verificato con `check-python-versions` vero: `>=3.11` passa, `>=3.11,<3.14`
+no.
+
+Non reintrodurre un cap "aggiornato": qualunque valore fisso torna fuori sincrono al
+prossimo Python.
+
 ### `ci-test` del frontend non gira
 
 Due difetti nel `frontend/Makefile` generato, che fanno fallire il job

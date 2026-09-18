@@ -63,7 +63,6 @@ redturtle-cookieplone create \
 | `--template` | `monorepo_addon` |
 | `--container-registry` | `github` |
 | `--docs` / `--no-docs` | docs generate |
-| `--python-max` | `3.13` |
 | `--plone-version`, `--volto-version` | l'ultima rilasciata, risolta via rete |
 | `--answers-file` | un `.cookieplone.json` da cui partire |
 | `--no-install` | salta `make -C frontend install` |
@@ -84,8 +83,9 @@ redturtle-cookieplone align <repo>
 Idempotente. Fa otto cose:
 
 - scrive `backend/setup.py`, lo shim per installarlo come develop egg da buildout;
-- adatta `backend/pyproject.toml`: `license` in forma `{ text = ... }`, vincolo
-  superiore su `requires-python`, blocchi `[tool.setuptools]`;
+- adatta `backend/pyproject.toml`: `license` in forma `{ text = ... }` e blocchi
+  `[tool.setuptools]`; toglie un eventuale `<3.x` da `requires-python`, che fa
+  fallire `check-python-versions` quando upstream aggiunge un Python ai classifier;
 - rimuove dalle workflow i job `release` e `storybook`, con i loro riferimenti;
 - aggiunge `.github/workflows/npm.yml` e `.github/workflows/pypi.yml`, che pubblicano
   al push di un tag autenticandosi via OIDC;
@@ -96,8 +96,7 @@ Idempotente. Fa otto cose:
 - sostituisce `workspace:*` con le versioni pubblicate nelle devDependencies
   dell'add-on, ricavandole da `@plone/volto@<versione>`.
 
-Opzioni: `--python-max` (default `3.13`), `--volto-version` (default: il tag di
-`frontend/mrs.developer.json`).
+Opzione: `--volto-version` (default: il tag di `frontend/mrs.developer.json`).
 
 Va lanciato **prima** di `make -C frontend install` — e' quello che fa `create`.
 Al contrario il lockfile va rigenerato, e `align` avvisa.
