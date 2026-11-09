@@ -253,6 +253,21 @@ def _parse_simple_toml(text: str) -> dict:
     return data
 
 
+def is_backend_only(repo: Path) -> bool:
+    """Un add-on solo backend ha pyproject.toml in root e nessun repository.toml."""
+    return not (repo / "repository.toml").exists() and (repo / "pyproject.toml").exists()
+
+
+def pyproject_dotted_name(repo: Path) -> str:
+    """Nome puntato del pacchetto, letto da `[project] name` del pyproject in root."""
+    match = re.search(
+        r'^name\s*=\s*"([^"]+)"', (repo / "pyproject.toml").read_text(), re.MULTILINE
+    )
+    if match:
+        return match.group(1)
+    sys.exit(f"{repo / 'pyproject.toml'}: [project] name non trovato.")
+
+
 def backend_dotted_name(meta: dict) -> str:
     """Nome puntato del pacchetto Python, es. rer.linkchecker."""
     name = meta.get("backend", {}).get("package", {}).get("name")
@@ -399,6 +414,47 @@ def add_pypi_workflow(repo: Path, backend_path: str, rep: Report) -> None:
     """
     content = overlay_text("pypi.yml.tmpl").replace("@BACKEND_ROOT@", backend_path)
     rep.write(repo / ".github" / "workflows" / "pypi.yml", content)
+
+
+def add_pypi_workflow_backend_only(repo: Path, rep: Report) -> None:
+    """Come `add_pypi_workflow`, per un repo che e' il pacchetto stesso.
+
+    Non c'e' `backend.yml` da richiamare (main.yml chiama direttamente le
+    workflow di plone/meta) e il pacchetto sta in root, quindi i check sono
+    quelli di main.yml e la build non ha `working-directory`.
+    """
+    rep.write(
+        repo / ".github" / "workflows" / "pypi.yml",
+        overlay_text("pypi-backend.yml.tmpl"),
+    )
+
+
+def disable_zest_release(repo: Path, rep: Report) -> None:
+    """Mette `release = false` in `[tool.zest-releaser]`.
+
+    Equivalente di `publish = false` per il monorepo: `make release` lancia
+    `fullrelease`, che per default carica il pacchetto su PyPI dalla macchina di
+    chi rilascia. A pubblicare al push del tag ci pensa pypi.yml, e farlo due
+    volte darebbe un errore di file gia' esistente.
+    """
+    path = repo / "pyproject.toml"
+    text = path.read_text()
+    match = re.search(r"^\[tool\.zest-releaser\]\s*$", text, flags=re.MULTILINE)
+    if not match:
+        warn(f"{path}: nessuna sezione [tool.zest-releaser], release resta com'e'.")
+        return
+    end = text.find("\n[", match.end())
+    end = len(text) if end == -1 else end
+    if re.search(r"^release\s*=", text[match.end() : end], flags=re.MULTILINE):
+        rep.already("pyproject.toml: zest.releaser gia' senza upload")
+        return
+    insert = match.end()
+    text = (
+        text[:insert]
+        + "\n# lo pubblichiamo via github actions (pypi.yml)\nrelease = false"
+        + text[insert:]
+    )
+    rep.write(path, text)
 
 
 def disable_publish(repo: Path, section_name: str, workflow: str, rep: Report) -> None:
@@ -775,8 +831,37 @@ def remove_needs_references(text: str, name: str) -> str:
     )
 
 
+def cmd_align_backend_only(args: argparse.Namespace, repo: Path) -> int:
+    """Allinea un add-on solo backend (`backend_addon`): niente repository.toml."""
+    dotted_name = pyproject_dotted_name(repo)
+    print(f"Allineamento di {repo}  (solo backend, pacchetto {dotted_name})\n")
+    rep = Report(args.dry_run, base=repo)
+    requires_python, python_versions = patch_pyproject(
+        repo / "pyproject.toml", dotted_name, rep
+    )
+    patch_setup_py(repo / "setup.py", requires_python, python_versions, rep)
+    add_pypi_workflow_backend_only(repo, rep)
+    disable_zest_release(repo, rep)
+    code = rep.summary()
+    if not getattr(args, "defer_next_steps", False):
+        print(f"""
+Prossimi passi
+
+  pending publisher     una tantum, a mano su pypi.org -> Publishing: progetto
+  (PyPI)                {dotted_name}, owner e repository da {_github_slug(repo, {})},
+                        workflow `pypi.yml`. PyPI lascia dichiararlo prima che
+                        il progetto esista: la prima publish la fa il primo tag.
+
+  make release          da qui in poi: versione, changelog e tag; al push del
+                        tag `pypi.yml` pubblica via OIDC, senza nessun token.
+""")
+    return code
+
+
 def cmd_align(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
+    if is_backend_only(repo):
+        return cmd_align_backend_only(args, repo)
     meta = read_repository_toml(repo)
     dotted_name = backend_dotted_name(meta)
     backend = repo / meta.get("backend", {}).get("package", {}).get("path", "backend")
