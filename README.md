@@ -98,6 +98,15 @@ Idempotente. Fa otto cose:
 
 Opzione: `--volto-version` (default: il tag di `frontend/mrs.developer.json`).
 
+### Add-on solo backend (`backend_addon`)
+
+Se in `<repo>` non c'e' `repository.toml` ma c'e' un `pyproject.toml` in root, `align`
+tratta il repo come un pacchetto solo backend e fa la parte Python: `setup.py` e
+adattamento di `pyproject.toml` come sopra, piu' `.github/workflows/pypi.yml` (lint e
+test, poi publish via OIDC al push del tag) e `release = false` in
+`[tool.zest-releaser]`, cosi' `make release` crea il tag ma non carica su PyPI due
+volte. Il pending publisher su pypi.org resta da configurare a mano.
+
 Va lanciato **prima** di `make -C frontend install` — e' quello che fa `create`.
 Al contrario il lockfile va rigenerato, e `align` avvisa.
 
